@@ -1,0 +1,212 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Gemini Inspection Bot - Pro</title>
+    <style>
+        :root {
+            --primary: #007bff;
+            --danger: #d9534f;
+            --bg: #121212;
+            --panel: #252525;
+            --text: #e0e0e0;
+        }
+
+        body { 
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif;
+            background-color: var(--bg);
+            color: var(--text);
+            margin: 0;
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            overflow-x: hidden;
+        }
+
+        /* Top Bar */
+        .header {
+            width: 100%;
+            background: #000;
+            padding: 10px 0;
+            text-align: center;
+            border-bottom: 2px solid var(--primary);
+            font-weight: bold;
+            letter-spacing: 1px;
+        }
+
+        /* Seletor de Câmeras */
+        .cam-selector {
+            display: flex;
+            width: 95%;
+            max-width: 450px;
+            gap: 10px;
+            margin: 15px 0;
+        }
+        .cam-btn {
+            flex: 1;
+            padding: 12px;
+            border: none;
+            border-radius: 8px;
+            background: #444;
+            color: white;
+            font-weight: bold;
+            transition: 0.3s;
+        }
+        .cam-btn.active { background: var(--primary); box-shadow: 0 0 10px var(--primary); }
+
+        /* Telemetria */
+        .telemetry {
+            display: flex;
+            width: 90%;
+            max-width: 450px;
+            justify-content: space-around;
+            background: var(--panel);
+            padding: 10px;
+            border-radius: 8px;
+            margin-bottom: 10px;
+            border: 1px solid #333;
+        }
+        .tel-val { color: var(--primary); font-family: monospace; font-size: 1.2em; }
+
+        /* Monitor de Vídeo */
+        .monitor {
+            width: 95%;
+            max-width: 450px;
+            border: 2px solid #333;
+            background: #000;
+            border-radius: 12px;
+            overflow: hidden;
+            position: relative;
+        }
+        .monitor img { width: 100%; display: block; }
+
+        /* Controles Pan-Tilt */
+        .joy-grid {
+            display: grid;
+            grid-template-columns: repeat(3, 70px);
+            grid-gap: 15px;
+            margin-top: 20px;
+        }
+        .btn-ctrl {
+            width: 70px;
+            height: 70px;
+            background: #333;
+            border: 1px solid #444;
+            color: white;
+            border-radius: 50%;
+            font-size: 24px;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            touch-action: manipulation;
+        }
+        .btn-ctrl:active { background: var(--primary); }
+        .btn-reset { border-radius: 12px; font-size: 14px; background: #444; }
+
+        /* Ações */
+        .actions {
+            width: 95%;
+            max-width: 450px;
+            margin-top: 25px;
+            padding-bottom: 30px;
+        }
+        .btn-snap {
+            width: 100%;
+            padding: 15px;
+            background: var(--danger);
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            font-size: 16px;
+        }
+        #status-log {
+            margin-top: 10px;
+            font-size: 13px;
+            color: #888;
+            height: 20px;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+    <div class="header">CONTROLE DE INSPEÇÃO REMOTA</div>
+
+    <div class="cam-selector">
+        <button id="btn-inspecao" class="cam-btn active" onclick="trocarCam('inspecao')">CAM INSPEÇÃO (P/T)</button>
+        <button id="btn-direcao" class="cam-btn" onclick="trocarCam('direcao')">CAM DIREÇÃO (FIXA)</button>
+    </div>
+
+    <div class="telemetry">
+        <div>PAN: <span id="val_pan" class="tel-val">0</span>°</div>
+        <div>TILT: <span id="val_tilt" class="tel-val">0</span>°</div>
+    </div>
+
+    <div class="monitor">
+        <img src="{{ url_for('video_feed') }}" id="feed">
+    </div>
+
+    <div class="joy-grid">
+        <div></div>
+        <button class="btn-ctrl" onclick="comando('up')">▲</button>
+        <div></div>
+
+        <button class="btn-ctrl" onclick="comando('left')">◀</button>
+        <button class="btn-ctrl btn-reset" onclick="comando('center')">RESET</button>
+        <button class="btn-ctrl" onclick="comando('right')">▶</button>
+
+        <div></div>
+        <button class="btn-ctrl" onclick="comando('down')">▼</button>
+        <div></div>
+    </div>
+
+    <div class="actions">
+        <button class="btn-snap" onclick="capturar()">📸 CAPTURAR IMAGEM DE INSPEÇÃO</button>
+        <div id="status-log">Link de rádio ativo</div>
+    </div>
+
+    <script>
+        // Alternar Câmeras
+        function trocarCam(nome) {
+            fetch('/mudar_camera?cam=' + nome).then(() => {
+                document.getElementById('btn-inspecao').className = 'cam-btn' + (nome === 'inspecao' ? ' active' : '');
+                document.getElementById('btn-direcao').className = 'cam-btn' + (nome === 'direcao' ? ' active' : '');
+            });
+        }
+
+        // Movimento
+        function comando(dir) {
+            fetch('/control?direction=' + dir).then(syncTel);
+        }
+
+        // Snapshot
+        function capturar() {
+            const log = document.getElementById('status-log');
+            log.innerText = "Gravando no disco...";
+            log.style.color = "#ffc107";
+
+            fetch('/snapshot')
+                .then(r => r.json())
+                .then(data => {
+                    log.innerText = "Snapshot salvo: " + data.arquivo;
+                    log.style.color = "#28a745";
+                });
+        }
+
+        // Sincronizar Telemetria
+        function syncTel() {
+            fetch('/status')
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById('val_pan').innerText = data.pan;
+                    document.getElementById('val_tilt').innerText = data.tilt;
+                });
+        }
+
+        // Loop de atualização (300ms)
+        setInterval(syncTel, 300);
+    </script>
+</body>
+</html>

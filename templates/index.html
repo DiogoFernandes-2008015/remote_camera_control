@@ -1,0 +1,167 @@
+<!DOCTYPE html>
+<html lang="pt-br">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Painel de Inspeção Fluido</title>
+    <style>
+        body { 
+            font-family: Arial, sans-serif; 
+            text-align: center; 
+            background: #121212; 
+            color: #fff; 
+            margin: 0; 
+            padding: 0;
+            user-select: none;
+        }
+        .header { background: #1f1f1f; padding: 15px; border-bottom: 2px solid #007bff; font-weight: bold; }
+        .telemetry {
+            display: flex;
+            justify-content: space-around;
+            background: #252525;
+            margin: 10px auto;
+            padding: 10px;
+            width: 90%;
+            max-width: 400px;
+            border-radius: 8px;
+            border: 1px solid #333;
+        }
+        .tel-item { font-family: monospace; font-size: 1.1rem; color: #007bff; }
+        .video-container {
+            width: 95%;
+            max-width: 450px;
+            margin: 10px auto;
+            border: 2px solid #333;
+            border-radius: 10px;
+            overflow: hidden;
+            background: #000;
+        }
+        img { width: 100%; height: auto; display: block; }
+        .controls {
+            display: grid;
+            grid-template-columns: repeat(3, 80px);
+            grid-gap: 15px;
+            justify-content: center;
+            margin: 20px auto;
+        }
+        .btn {
+            width: 80px;
+            height: 80px;
+            background: #333;
+            color: white;
+            border: 1px solid #444;
+            border-radius: 15px;
+            font-size: 1.5rem;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            cursor: pointer;
+            touch-action: manipulation;
+        }
+        .btn:active { background: #007bff; transform: scale(0.95); }
+        .btn-center { background: #444; font-size: 0.9rem; }
+        .snap-container { margin-bottom: 30px; }
+        .btn-snap {
+            width: 90%;
+            max-width: 400px;
+            padding: 15px;
+            background: #d9534f;
+            border: none;
+            border-radius: 8px;
+            color: white;
+            font-weight: bold;
+            font-size: 1rem;
+            cursor: pointer;
+        }
+        .btn-snap:active { background: #c9302c; }
+        #log { font-size: 0.9rem; color: #888; margin-top: 10px; height: 1.2rem; }
+    </style>
+</head>
+<body>
+
+    <div class="header">SISTEMA DE INSPEÇÃO PRO</div>
+
+    <div class="telemetry">
+        <div class="tel-item">PAN: <span id="val_pan">0</span>°</div>
+        <div class="tel-item">TILT: <span id="val_tilt">0</span>°</div>
+    </div>
+
+    <div class="video-container">
+        <img src="/video_feed" id="feed">
+    </div>
+
+    <div class="controls">
+        <div></div>
+        <div class="btn" ontouchstart="iniciarMovimento('up')" ontouchend="pararMovimento()" onmousedown="iniciarMovimento('up')" onmouseup="pararMovimento()">▲</div>
+        <div></div>
+
+        <div class="btn" ontouchstart="iniciarMovimento('left')" ontouchend="pararMovimento()" onmousedown="iniciarMovimento('left')" onmouseup="pararMovimento()">◀</div>
+        <div class="btn btn-center" onclick="iniciarMovimento('center')">RESET</div>
+        <div class="btn" ontouchstart="iniciarMovimento('right')" ontouchend="pararMovimento()" onmousedown="iniciarMovimento('right')" onmouseup="pararMovimento()">▶</div>
+
+        <div></div>
+        <div class="btn" ontouchstart="iniciarMovimento('down')" ontouchend="pararMovimento()" onmousedown="iniciarMovimento('down')" onmouseup="pararMovimento()">▼</div>
+        <div></div>
+    </div>
+
+    <div class="snap-container">
+        <button class="btn-snap" onclick="tirarFoto()">📸 CAPTURAR IMAGEM</button>
+        <div id="log">Sistema Pronto</div>
+    </div>
+
+    <script>
+        // Envia o comando para começar a andar na direção indicada
+        document.addEventListener('contextmenu', event => event.preventDefault()); // Desativa menu de contexto chato no mobile
+
+        function iniciarMovimento(dir) {
+            fetch('/control?direction=' + dir);
+    
+            // Se for o botão de RESET, força a atualização da tela imediatamente
+            if (dir === 'center') {
+                setTimeout(atualizarStatus, 100);
+            }
+        }
+
+        // Envia o comando para parar imediatamente
+        function pararMovimento() {
+            fetch('/control?direction=stop');
+        }
+
+        function atualizarStatus() {
+            fetch('/status')
+                .then(response => response.json())
+                .then(data => {
+                    document.getElementById('val_pan').innerText = data.pan;
+                    document.getElementById('val_tilt').innerText = data.tilt;
+                })
+                .catch(err => console.log("Aguardando inicialização da telemetria..."));
+        }
+
+        function tirarFoto() {
+            const log = document.getElementById('log');
+            log.innerText = "Salvando na pasta projeto00/capturas...";
+            log.style.color = "#ffc107";
+            
+            fetch('/snapshot')
+                .then(response => response.json())
+                .then(data => {
+                    if (data.status === 'sucesso') {
+                        log.innerText = "Salvo: " + data.arquivo;
+                        log.style.color = "#28a745";
+                    } else {
+                        log.innerText = "Erro ao salvar imagem de inspeção.";
+                        log.style.color = "#d9534f";
+                    }
+                    setTimeout(() => { log.innerText = "Sistema Pronto"; log.style.color = "#888"; }, 4000);
+                })
+                .catch(err => {
+                    log.innerText = "Erro de rede ao tentar capturar.";
+                    log.style.color = "#d9534f";
+                });
+        }
+
+        // Sincroniza os ângulos na tela a cada 200ms para o usuário acompanhar o movimento fluido
+        setInterval(atualizarStatus, 200);
+    </script>
+</body>
+</html>
